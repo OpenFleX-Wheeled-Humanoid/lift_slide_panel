@@ -1,0 +1,8 @@
+<library path="lift_slide_panel">
+  <class
+    name="lift_slide_panel/LiftPanel"
+    type="lift_slide_panel::LiftPanel"
+    base_class_type="rviz_common::Panel">
+    <description>升降滑台控制面板：速度模式、位置模式、回零模式、急停。</description>
+  </class>
+</library>
