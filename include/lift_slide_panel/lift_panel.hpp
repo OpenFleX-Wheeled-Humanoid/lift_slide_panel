@@ -96,8 +96,8 @@ protected:
   }
 
 private:
-  double range_min_{-0.650};
-  double range_max_{0.300};
+  double range_min_{-0.750};
+  double range_max_{0.400};
   double position_{0.0};
 };
 
@@ -151,7 +151,6 @@ private:
   void postToUi(std::function<void()> fn);
   void resetManualMotionState();
   void requestHoming(HomingAction action);
-  void publishPosition(double target_position);
   void stopMotion();
   bool isCommunicationOk() const;
   bool canOperate() const;
@@ -172,7 +171,6 @@ private:
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr driver_homing_state_sub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr limit_switch_state_sub_;
   rclcpp::Subscription<lift_slide_msgs::msg::MotorStatus>::SharedPtr motor_status_sub_;
-  rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr position_cmd_pub_;
   rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr speed_cmd_pub_;
   rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr manual_step_pub_;
   rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr manual_jog_pub_;
@@ -241,8 +239,8 @@ private:
   std::atomic<bool> joint_valid_{false};
 
   std::string joint_name_{"lift_joint"};
-  double display_min_height_{-0.650};
-  double display_max_height_{0.300};
+  double display_min_height_{-0.750};
+  double display_max_height_{0.400};
 
   std::atomic<bool> limit_switch_online_{false};
   bool limit_home_{false};
@@ -256,6 +254,9 @@ private:
   bool drive_fault_{false};
   bool driver_homing_active_{false};
   bool driver_homed_{false};
+  bool motion_ready_{false};
+  bool reference_valid_{false};
+  bool encoder_reference_lost_{false};
   std::string cia402_state_str_;
   std::string mode_name_str_;
   std::string last_homing_detail_;

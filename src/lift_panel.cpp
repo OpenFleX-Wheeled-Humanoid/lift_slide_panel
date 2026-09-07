@@ -224,9 +224,9 @@ void LiftPanel::setupUi()
   root->addWidget(position_bar_);
 
   auto * bar_range = new QHBoxLayout();
-  bar_min_label_ = new QLabel(QStringLiteral("-0.650 m"));
+  bar_min_label_ = new QLabel(QStringLiteral("-0.750 m"));
   bar_min_label_->setStyleSheet("font-size:9px;color:#AAA;");
-  bar_max_label_ = new QLabel(QStringLiteral("0.300 m"));
+  bar_max_label_ = new QLabel(QStringLiteral("0.400 m"));
   bar_max_label_->setStyleSheet("font-size:9px;color:#AAA;");
   bar_range->addWidget(bar_min_label_);
   bar_range->addStretch();
@@ -431,20 +431,10 @@ void LiftPanel::setupRos()
     "lift_slide_panel",
     rclcpp::NodeOptions().use_global_arguments(true));
 
-  node_->declare_parameter<double>("pos_min", -0.650);
-  node_->declare_parameter<double>("pos_max", 0.300);
-  node_->declare_parameter<std::string>(
-    "position_command_topic", "/lift_position_controller/commands");
+  node_->declare_parameter<double>("pos_min", -0.750);
+  node_->declare_parameter<double>("pos_max", 0.400);
   display_min_height_ = node_->get_parameter("pos_min").as_double();
   display_max_height_ = node_->get_parameter("pos_max").as_double();
-  const std::string position_command_topic =
-    node_->get_parameter("position_command_topic").as_string();
-
-  position_cmd_pub_ = node_->create_publisher<std_msgs::msg::Float64MultiArray>(
-    position_command_topic,
-    rclcpp::SystemDefaultsQoS());
-  RCLCPP_INFO(
-    node_->get_logger(), "升降台面板位置控制话题: %s", position_command_topic.c_str());
 
   // 创建速度命令发布器（发布到 lift_state_controller 的速度话题）
   speed_cmd_pub_ = node_->create_publisher<std_msgs::msg::Float64>(
@@ -672,6 +662,9 @@ void LiftPanel::motorStatusCallback(const lift_slide_msgs::msg::MotorStatus::Sha
   // Update homing state
   driver_homed_ = msg->homing_complete;
   driver_homing_active_ = msg->is_homing;
+  motion_ready_ = msg->motion_ready;
+  reference_valid_ = msg->reference_valid;
+  encoder_reference_lost_ = msg->encoder_reference_lost;
 
   // Update position/velocity from motor_status (more reliable than joint_states)
   joint_position_.store(msg->position_m);
@@ -856,8 +849,8 @@ void LiftPanel::onReturnHomeClicked()
     detail_label_->setText(QStringLiteral("请先使能电机，再执行回零操作"));
     return;
   }
-  if (!driver_homed_) {
-    detail_label_->setText(QStringLiteral("请先设置零点，再执行回零操作"));
+  if (!reference_valid_) {
+    detail_label_->setText(QStringLiteral("编码器零点未验证，请先设置零点"));
     return;
   }
   if (driver_homing_active_) {
@@ -1319,32 +1312,6 @@ void LiftPanel::onSpeedSliderChanged(int)
   updateMotionValueLabels();
 }
 
-void LiftPanel::publishPosition(double target_position)
-{
-  if (position_cmd_pub_ == nullptr) {
-    return;
-  }
-
-  // 先发布速度命令
-  const double speed = sliderSpeedToMps(speed_slider_->value());
-  if (speed_cmd_pub_ != nullptr) {
-    std_msgs::msg::Float64 speed_msg;
-    speed_msg.data = speed;
-    speed_cmd_pub_->publish(speed_msg);
-  }
-
-  // 然后发布位置命令
-  std_msgs::msg::Float64MultiArray msg;
-  msg.data.push_back(target_position);
-  position_cmd_pub_->publish(msg);
-
-  RCLCPP_INFO(
-    node_->get_logger(),
-    "发布位置命令: %.4f m (速度: %.3f m/s)",
-    target_position,
-    speed);
-}
-
 void LiftPanel::stopMotion()
 {
   resetManualMotionState();
@@ -1384,7 +1351,8 @@ void LiftPanel::updateButtons()
   disable_button_->setEnabled(comm_ok && (drive_ready || driver_homing_active_));
   reset_button_->setEnabled(true);
   set_zero_button_->setEnabled(comm_ok && drive_ready && !driver_homing_active_);
-  return_home_button_->setEnabled(comm_ok && drive_ready && !driver_homing_active_ && driver_homed_);
+  return_home_button_->setEnabled(
+    comm_ok && drive_ready && !driver_homing_active_ && driver_homed_ && reference_valid_);
   up_button_->setEnabled(manual_allowed && (!limits_online || !limit_not));
   down_button_->setEnabled(manual_allowed && (!limits_online || !limit_pot));
 
@@ -1447,12 +1415,16 @@ void LiftPanel::updateStatusSummary()
         : "font-size:11px;font-weight:bold;color:#DC2626;");
   }
 
-  const QString homed_text =
-    driver_homed_ ? QStringLiteral("已设置") : QStringLiteral("未设置");
+  QString homed_text;
+  if (encoder_reference_lost_ || !reference_valid_) {
+    homed_text = QStringLiteral("零点丢失");
+  } else {
+    homed_text = driver_homed_ ? QStringLiteral("已设置") : QStringLiteral("未设置");
+  }
   if (zero_state_label_ != nullptr) {
     zero_state_label_->setText(QStringLiteral("零点:%1").arg(homed_text));
     zero_state_label_->setStyleSheet(
-      driver_homed_
+      reference_valid_
         ? "font-size:11px;font-weight:bold;color:#16A34A;"
         : "font-size:11px;font-weight:bold;color:#F59E0B;");
   }
